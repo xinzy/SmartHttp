@@ -2,6 +2,7 @@ package com.xinzy.http;
 
 import android.content.Context;
 import android.os.Build;
+import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.webkit.WebSettings;
@@ -13,7 +14,9 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
+import java.net.URLEncoder;
 import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -70,10 +73,8 @@ class Utils {
     static String splitParam(HttpParam param) {
         StringBuffer sb = new StringBuffer();
         if (param.params.size() > 0) {
-            Set<String> keys = param.params.keySet();
-            for (String key : keys) {
-                HttpParam.Entry entry = param.params.get(key);
-                sb.append(entry.key).append("=").append(entry.value).append('&');
+            for (HttpParam.Entry entry : param.params) {
+                sb.append(entry.key).append("=").append(encode(entry.value)).append('&');
             }
             return sb.substring(0, sb.length() - 1);
         }
@@ -136,6 +137,15 @@ class Utils {
             header.put(name, headers.get(name));
         }
         return header;
+    }
+
+    static String encode(String input) {
+        if (TextUtils.isEmpty(input)) return "";
+        try {
+            return URLEncoder.encode(input, HttpParam.ENCODE);
+        } catch (UnsupportedEncodingException e) {
+            return input;
+        }
     }
 
     static SSLParams sslSocketFactory(X509TrustManager trustManager, InputStream bksFile, String password, InputStream[] certificates) {

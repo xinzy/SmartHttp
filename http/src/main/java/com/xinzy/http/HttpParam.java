@@ -6,6 +6,8 @@ import android.util.ArrayMap;
 import java.io.File;
 import java.net.FileNameMap;
 import java.net.URLConnection;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -20,21 +22,23 @@ import okhttp3.RequestBody;
 
 class HttpParam {
 
+    static final String ENCODE = "UTF-8";
+
     public static final MediaType MEDIA_TYPE_PLAIN = MediaType.parse("text/plain;charset=utf-8");
     public static final MediaType MEDIA_TYPE_JSON = MediaType.parse("application/json;charset=utf-8");
     public static final MediaType MEDIA_TYPE_STREAM = MediaType.parse("application/octet-stream");
 
-    Map<String, Entry> params;
+    List<Entry> params;
     boolean isMulti = false;
 
     HttpParam() {
-        params = new ArrayMap<>();
+        params = new ArrayList<>();
     }
 
     HttpParam add(String key, String val) {
         if (!TextUtils.isEmpty(key)) {
             val = val == null ? "" : val;
-            params.put(key, new Entry(key, val));
+            params.add(new Entry(key, val));
         }
         return this;
     }
@@ -52,19 +56,14 @@ class HttpParam {
     HttpParam multi(String key, File file, String filename) {
         if (!TextUtils.isEmpty(key)) {
             isMulti = true;
-            params.put(key, new Entry(key, filename, file));
+            params.add(new Entry(key, filename, file));
         }
         return this;
     }
 
     HttpParam merge(HttpParam param) {
         if (param != null && param.params != null && param.params.size() > 0) {
-            Set<String> keys = param.params.keySet();
-            for (String key : keys) {
-                if (!params.containsKey(key)) {
-                    params.put(key, param.params.get(key));
-                }
-            }
+            params.addAll(param.params);
         }
         return this;
     }
@@ -75,21 +74,17 @@ class HttpParam {
         }
         if (isMulti) {
             MultipartBody.Builder builder = new MultipartBody.Builder().setType(MultipartBody.FORM);
-            Set<String> keys = params.keySet();
-            for (String key : keys) {
-                Entry param = params.get(key);
+            for (Entry param : params) {
                 if (param.isMulti) {
                     builder.addFormDataPart(param.key, param.value, RequestBody.create(param.getMediaType(), param.file));
                 } else {
-                    builder.addFormDataPart(param.key, param.value);
+                    builder.addFormDataPart(param.key, Utils.encode(param.value));
                 }
             }
             return builder.build();
         } else {
             FormBody.Builder builder = new FormBody.Builder();
-            Set<String> keys = params.keySet();
-            for (String key : keys) {
-                Entry param = params.get(key);
+            for (Entry param : params) {
                 if (!param.isMulti) {
                     builder.add(param.key, param.value);
                 }

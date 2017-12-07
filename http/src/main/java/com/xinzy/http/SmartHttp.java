@@ -727,7 +727,7 @@ public final class SmartHttp {
         }
         sb.append(Utils.splitParam(mParam));
 
-        return sb.substring(0, sb.length() - 1);
+        return sb.toString();
     }
 
     private OkHttpClient client() {
