@@ -108,16 +108,16 @@ interface CookieStore {
     }
 
     class C {
-        public String name;
-        public String value;
-        public long expiresAt;
-        public String domain;
-        public String path;
-        public boolean secure;
-        public boolean httpOnly;
+        String name;
+        String value;
+        long expiresAt;
+        String domain;
+        String path;
+        boolean secure;
+        boolean httpOnly;
 
-        public boolean persistent;
-        public boolean hostOnly;
+        boolean persistent;
+        boolean hostOnly;
 
         C(String name, String value, long expiresAt, String domain, String path,
                  boolean secure, boolean httpOnly, boolean persistent, boolean hostOnly) {
@@ -142,8 +142,11 @@ interface CookieStore {
             if (secure) {
                 builder.secure();
             }
-            if (hostOnly) {
+            if (httpOnly) {
                 builder.httpOnly();
+            }
+            if (hostOnly) {
+                builder.hostOnlyDomain(domain);
             }
             return builder.build();
         }

@@ -3,6 +3,8 @@ package com.xinzy.http;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 
+import com.google.gson.Gson;
+
 import java.io.File;
 import java.net.FileNameMap;
 import java.net.URLConnection;
@@ -28,12 +30,12 @@ class HttpParam {
     public static final MediaType MEDIA_TYPE_JSON = MediaType.parse("application/json;charset=utf-8");
     public static final MediaType MEDIA_TYPE_STREAM = MediaType.parse("application/octet-stream");
 
-    List<Entry> params;
-    boolean isMulti = false;
+    private static final int TYPE_DEFAULT = 0;
+    private static final int TYPE_MULTI = 1;
+    private static final int TYPE_JSON = 2;
 
-    HttpParam() {
-        params = new ArrayList<>();
-    }
+    List<Entry> params = new ArrayList<>();;
+    private int paramType = TYPE_DEFAULT;
 
     HttpParam add(String key, String val) {
         if (!TextUtils.isEmpty(key)) {
@@ -55,7 +57,7 @@ class HttpParam {
 
     HttpParam multi(String key, File file, String filename) {
         if (!TextUtils.isEmpty(key)) {
-            isMulti = true;
+            paramType = TYPE_MULTI;
             params.add(new Entry(key, filename, file));
         }
         return this;
@@ -68,11 +70,16 @@ class HttpParam {
         return this;
     }
 
+    HttpParam asJson() {
+        paramType = TYPE_JSON;
+        return this;
+    }
+
     RequestBody body() {
         if (params.isEmpty()) {
-            return RequestBody.create(null, new byte[0]);
+            return RequestBody.create(MEDIA_TYPE_PLAIN, new byte[0]);
         }
-        if (isMulti) {
+        if (paramType == TYPE_MULTI) {
             MultipartBody.Builder builder = new MultipartBody.Builder().setType(MultipartBody.FORM);
             for (Entry param : params) {
                 if (param.isMulti) {
@@ -82,6 +89,8 @@ class HttpParam {
                 }
             }
             return builder.build();
+        } else if (paramType == TYPE_JSON) {
+            return RequestBody.create(MEDIA_TYPE_JSON, toJson());
         } else {
             FormBody.Builder builder = new FormBody.Builder();
             for (Entry param : params) {
@@ -90,6 +99,31 @@ class HttpParam {
                 }
             }
             return builder.build();
+        }
+    }
+
+    Map<String, String> parameters() {
+        Map<String, String> map = new ArrayMap<>();
+        for (Entry entry : params) {
+            if (entry != null && !entry.isMulti) {
+                map.put(entry.key, entry.value);
+            }
+        }
+
+        return map;
+    }
+
+    private String toJson() {
+        if (params.size() == 0) {
+            return "{}";
+        } else {
+            Map<String, String> map = new ArrayMap<>(params.size());
+            for (Entry entry : params) {
+                if (!entry.isMulti) {
+                    map.put(entry.key, entry.value);
+                }
+            }
+            return new Gson().toJson(map);
         }
     }
 

@@ -14,11 +14,7 @@ import okhttp3.Headers;
 
 class HttpHeader {
 
-    Map<String, String> headers;
-
-    HttpHeader() {
-        headers = new ArrayMap<>(8);
-    }
+    Map<String, String> headers = new ArrayMap<>(8);
 
     HttpHeader add(String key, String value) {
         if (TextUtils.isEmpty(key)) throw new IllegalArgumentException("key cannot be null");

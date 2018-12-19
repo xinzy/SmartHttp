@@ -1,12 +1,14 @@
 package com.xinzy.smarthttp;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
+import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
@@ -19,16 +21,10 @@ import com.xinzy.http.SmartHttpException;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Map;
-
-import rx.Observable;
-import rx.Subscriber;
-import rx.android.schedulers.AndroidSchedulers;
-import rx.schedulers.Schedulers;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
-    public static final String URL = "http://10.107.70.41/api/api.php?xxx=xx";
+    public static final String URL = "http://10.107.77.132/api/api.php?xxx=xx";
     public static final String URL_DOWNLOAD = "http://192.168.3.23/api/download.zip";
 
     public static final String URL_HTTPS = "https://www.baidu.com";
@@ -44,12 +40,16 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public void onKotlin(View view) {
+        startActivity(new Intent(this, KotlinActivity.class));
+    }
+
     public void onGet(View view) {
-        SmartHttp.get(URL).header("key", "123").header("token", "SmartHttp.SmartHttpException").cacheKey("test").cacheModel(SmartHttp.FIRST_CACHE_THEN_REQUEST)
+        SmartHttp.get(URL).header("key", "123").header("token", "SmartHttp.SmartHttpException").cacheKey("test")
             .param("id", "1").param("name", "xin").param("val", "unknown").enqueue(new TypeToken<Res>(){}, new RequestCallback<Res>() {
             @Override
-            public void onSuccess(Res res, Map<String, String> headers, boolean isFromCache) {
-                Log.d(TAG, "onSuccess: " + res + "; header: " + headers);
+            public void onSuccess(Res res) {
+                Log.d(TAG, "onSuccess: " + res);
             }
 
             @Override
@@ -64,8 +64,8 @@ public class MainActivity extends AppCompatActivity {
             .param("id", "1").param("name", "xin").param("val", "unknown")
             .enqueue(new TypeToken<Res>(){}, new RequestCallback<Res>() {
             @Override
-            public void onSuccess(Res res, Map<String, String> headers, boolean isFromCache) {
-                Log.d(TAG, "onSuccess: " + res + "; header: " + headers);
+            public void onSuccess(Res res) {
+                Log.d(TAG, "onSuccess: " + res);
             }
 
             @Override
@@ -80,8 +80,8 @@ public class MainActivity extends AppCompatActivity {
                 .param("id", "1").param("name", "xin").param("val", "unknown")
                 .enqueue(new TypeToken<Res>(){}, new RequestCallback<Res>() {
                     @Override
-                    public void onSuccess(Res res, Map<String, String> headers, boolean isFromCache) {
-                        Log.d(TAG, "onSuccess: " + res + "; header: " + headers);
+                    public void onSuccess(Res res) {
+                        Log.d(TAG, "onSuccess: " + res);
                     }
 
                     @Override
@@ -96,8 +96,8 @@ public class MainActivity extends AppCompatActivity {
             .param("id", "1").param("name", "xin").param("val", "unknown")
             .enqueue(Res.class, new RequestCallback<Res>() {
             @Override
-            public void onSuccess(Res res, Map<String, String> headers, boolean isFromCache) {
-                Log.d(TAG, "onSuccess: " + res + "; header: " + headers);
+            public void onSuccess(Res res) {
+                Log.d(TAG, "onSuccess: " + res);
             }
 
             @Override
@@ -114,8 +114,8 @@ public class MainActivity extends AppCompatActivity {
             .param("id", "1").param("name", "xin").param("val", "unknown").param("img", file, "img.jpg")
             .param("flower", file1, "flower.jpg").enqueue(new TypeToken<Res>(){}, new RequestCallback<Res>() {
             @Override
-            public void onSuccess(Res res, Map<String, String> headers, boolean isFromCache) {
-                Log.d(TAG, "onSuccess: " + res + "; header: " + headers);
+            public void onSuccess(Res res) {
+                Log.d(TAG, "onSuccess: " + res);
             }
 
             @Override
@@ -162,7 +162,7 @@ public class MainActivity extends AppCompatActivity {
         SmartHttp.get(URL).header("key", "123").header("token", "SmartHttp.SmartHttpException")
                 .param("id", "1").param("name", "xin").param("val", "unknown").enqueue(new RequestCallback<String>() {
             @Override
-            public void onSuccess(String s, Map<String, String> headers, boolean isFromCache) {
+            public void onSuccess(String s) {
                 Log.i(TAG, "onSuccess: " + s);
             }
 
@@ -176,7 +176,7 @@ public class MainActivity extends AppCompatActivity {
     public void onHttps0(View view) {
         SmartHttp.get(URL_HTTPS).enqueue(new RequestCallback<String>() {
             @Override
-            public void onSuccess(String s, Map<String, String> headers, boolean isFromCache) {
+            public void onSuccess(String s) {
                 Log.i(TAG, "onSuccess: " + s);
             }
 
@@ -191,7 +191,7 @@ public class MainActivity extends AppCompatActivity {
         SmartHttp.get(URL_HTTPS_UNSAFED).certificates(getAssets().open("srca.cer")).addNetworkInterceptor(new ModifyInterceptor())
             .enqueue(new RequestCallback<String>() {
             @Override
-            public void onSuccess(String s, Map<String, String> headers, boolean isFromCache) {
+            public void onSuccess(String s) {
                 Log.i(TAG, "onSuccess: " + s);
             }
 
@@ -203,30 +203,30 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void onRx(View v) {
-        SmartHttp.get(URL).header("key", "123").header("token", "SmartHttp.SmartHttpException")
-                .param("id", "1").param("name", "xin").param("val", "unknown").observable(Res.class)
-                .subscribe(res -> Log.d(TAG, "onRx: " + res));
+//        SmartHttp.get(URL).header("key", "123").header("token", "SmartHttp.SmartHttpException")
+//                .param("id", "1").param("name", "xin").param("val", "unknown").observable(Res.class)
+//                .subscribe(res -> Log.d(TAG, "onRx: " + res));
     }
 
     public void onTest(View view) {
-        Observable.just((Void) null).lift((Observable.Operator<Res, Void>) subscriber -> new Subscriber<Void>() {
-            @Override
-            public void onCompleted() {
-                subscriber.onCompleted();
-            }
-
-            @Override
-            public void onError(Throwable e) {
-                subscriber.onError(e);
-            }
-
-            @Override
-            public void onNext(Void param) {
-                Res res = SmartHttp.get(URL).header("key", "123").header("token", "SmartHttp.SmartHttpException")
-                        .param("id", "1").param("name", "xin").param("val", "unknown").execute(Res.class);
-                subscriber.onNext(res);
-            }
-        }).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread()).subscribe(res -> Log.d(TAG, "onTest: " + res));
+//        Observable.just((Void) null).lift((Observable.Operator<Res, Void>) subscriber -> new Subscriber<Void>() {
+//            @Override
+//            public void onCompleted() {
+//                subscriber.onCompleted();
+//            }
+//
+//            @Override
+//            public void onError(Throwable e) {
+//                subscriber.onError(e);
+//            }
+//
+//            @Override
+//            public void onNext(Void param) {
+//                Res res = SmartHttp.get(URL).header("key", "123").header("token", "SmartHttp.SmartHttpException")
+//                        .param("id", "1").param("name", "xin").param("val", "unknown").execute(Res.class);
+//                subscriber.onNext(res);
+//            }
+//        }).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread()).subscribe(res -> Log.d(TAG, "onTest: " + res));
 
 //        Observable.just((Void) null).map(param -> {
 //                Log.d(TAG, "onTest: " + Thread.currentThread());
@@ -238,11 +238,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void onCache(View view) {
-        SmartHttp.get(URL).header("key", "123").header("token", "SmartHttp.SmartHttpException").cacheKey("test").cacheModel(SmartHttp.FIRST_CACHE_THEN_REQUEST)
+        SmartHttp.get(URL).header("key", "123").header("token", "SmartHttp.SmartHttpException").cacheKey("test")
                 .param("id", "1").param("name", "xin").param("val", "unknown").enqueue(new TypeToken<Res>(){}, new RequestCallback<Res>() {
             @Override
-            public void onSuccess(Res res, Map<String, String> headers, boolean isFromCache) {
-                Log.d(TAG, "onSuccess: isFromCache=" + isFromCache + "; " + res + "; header=" + headers);
+            public void onSuccess(Res res) {
+                Log.d(TAG, "onSuccess: res=" + res);
             }
 
             @Override
@@ -257,8 +257,8 @@ public class MainActivity extends AppCompatActivity {
             .tag("cancel").param("id", "1").param("name", "xin").param("val", "unknown")
             .enqueue(new TypeToken<Res>(){}, new RequestCallback<Res>() {
             @Override
-            public void onSuccess(Res res, Map<String, String> headers, boolean isFromCache) {
-                Log.d(TAG, "onSuccess: " + res + "; header: " + headers);
+            public void onSuccess(Res res) {
+                Log.d(TAG, "onSuccess: " + res);
             }
 
             @Override
@@ -274,8 +274,8 @@ public class MainActivity extends AppCompatActivity {
             .tag("cancel").param("id", "1").param("name", "xin").param("val", "unknown")
             .enqueue(new TypeToken<Res>(){}, new RequestCallback<Res>() {
             @Override
-            public void onSuccess(Res res, Map<String, String> headers, boolean isFromCache) {
-                Log.d(TAG, "onSuccess: " + res + "; header: " + headers);
+            public void onSuccess(Res res) {
+                Log.d(TAG, "onSuccess: " + res);
             }
 
             @Override

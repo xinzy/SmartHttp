@@ -13,6 +13,12 @@
         <Button
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:onClick="onKotlin"
+            android:text="Kotlin Test"/>
+
+        <Button
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:onClick="onGet"
             android:text="GET" />
 

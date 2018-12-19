@@ -1,5 +1,6 @@
 package com.xinzy.smarthttp;
 
+import android.support.v4.util.ArrayMap;
 import android.util.Log;
 
 import java.io.IOException;
@@ -24,7 +25,7 @@ public class InitInterceptor implements Interceptor{
             return chain.proceed(request);
         } catch (IOException e) {
             e.printStackTrace();
-
+            new ArrayMap<String, String>();
             throw e;
         }
     }

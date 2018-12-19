@@ -1,26 +1,25 @@
 package com.xinzy.http;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.X509TrustManager;
 
-import okhttp3.CacheControl;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.Interceptor;
@@ -28,10 +27,6 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
-import rx.Observable;
-import rx.Subscriber;
-import rx.android.schedulers.AndroidSchedulers;
-import rx.schedulers.Schedulers;
 
 import static com.xinzy.http.SmartHttpConfig.UA;
 
@@ -42,10 +37,6 @@ import static com.xinzy.http.SmartHttpConfig.UA;
 public final class SmartHttp {
     static final String TAG = "SmartHttp";
 
-    private static final int MAX_CACHE_SIZE = 50 * 1024 * 1024;
-    private static final int DEFAULT_CACHE_AGE = 60;
-    private static final String CACHE_DIR_NAME = "http";
-
     private static final int METHOD_GET = 0x0;
     private static final int METHOD_POST = 0x1;
     private static final int METHOD_PUT = 0x2;
@@ -54,14 +45,6 @@ public final class SmartHttp {
     private static final int METHOD_PATCH = 0x10;
 
     private static final int BUFFER_SIZE = 16 * 1024;
-
-    /** 默认缓存 */
-    public static final int DEFAULT_CACHE = 0x0;
-    /** 不使用缓存 */
-    public static final int NO_CACHE = 0x1;
-    /** 先读缓存再访问网络 */
-    public static final int FIRST_CACHE_THEN_REQUEST = 0x2;
-
 
     /** 无Cookie持久化 */
     public static final int NO_COOKIE = 0x0;
@@ -85,24 +68,24 @@ public final class SmartHttp {
     /** parameter */
     private HttpParam mParam;
 
-    /** json resolver */
-    private Gson mResolver;
-
-    /** Cache有效期 */
-    private long mCacheTime = 3600;
-    /** Cache key */
+    /** 缓存key */
     private String mCacheKey;
-    /** Cache model */
-    private int mCacheModel = DEFAULT_CACHE;
-
-    private static String cacheDir;
-    private static Cache mCache;
 
     static boolean isDebug;
 
+    private static File mCacheDir;
+
     private static OkHttpClient sOkHttpClient;
 
+    private Cache mCache;
+
     private SmartHttpConfig mCopyConfig;
+
+    private Handler mMainHandler = new Handler(Looper.getMainLooper());
+    private Class<?> mTargetClazz;
+    private TypeToken<?> mTargetTypeReference;
+
+    private Gson mGson;
 
     private SmartHttp(String url, int method) {
         mRequestMethod = method;
@@ -110,40 +93,15 @@ public final class SmartHttp {
 
         mParam = new HttpParam();
         mHeader = new HttpHeader();
-        mResolver = SmartHttpConfig.getInstance().mResolver;
     }
 
     static void init(SmartHttpConfig config) {
-
-        File cacheFile = new File(config.mContext.getExternalCacheDir(), CACHE_DIR_NAME);
-        if (!cacheFile.exists()) {
-            if (!cacheFile.mkdirs()) {
-                cacheFile = new File(config.mContext.getCacheDir(), CACHE_DIR_NAME);
-                if (!cacheFile.exists()) {
-                    cacheFile.mkdirs();
-                }
-            }
-        }
-        cacheDir = cacheFile.getAbsolutePath();
-        mCache = new Cache.CacheImpl(cacheDir);
-        isDebug = config.isDebug;
-
-        OkHttpClient.Builder builder;
-        if (sOkHttpClient == null) {
-            builder = new OkHttpClient.Builder().cache(new okhttp3.Cache(cacheFile, MAX_CACHE_SIZE));
-        } else {
-            builder = sOkHttpClient.newBuilder();
-        }
-        switch (config.cookieType) {
-            case MEMORY_COOKIE:
-                builder.cookieJar(new CookieJarImp());
-                break;
-            case PERSISTENT_COOKIE:
-                builder.cookieJar(new CookieJarImp(cacheDir));
-        }
-        client(builder, config);
+        OkHttpClient.Builder builder = new OkHttpClient.Builder();
+        prepareClient(builder, config);
 
         sOkHttpClient = builder.build();
+        isDebug = config.isDebug;
+        mCacheDir = config.cacheDir;
     }
 
     /**
@@ -278,8 +236,13 @@ public final class SmartHttp {
 
     private void checkConfig() {
         if (mCopyConfig == null) {
-            mCopyConfig = SmartHttpConfig.getInstance().copy();
+            mCopyConfig = SmartHttpConfig.getInstance().duplicate();
         }
+    }
+
+    public SmartHttp resolver(@NonNull Gson resolver) {
+        mGson = resolver;
+        return this;
     }
 
     /**
@@ -289,16 +252,6 @@ public final class SmartHttp {
      */
     public SmartHttp userAgent(String userAgent) {
         mHeader.add(UA, userAgent);
-        return this;
-    }
-
-    /**
-     * 设置Gson 解析器
-     * @param resolver
-     * @return
-     */
-    public SmartHttp resolver(Gson resolver) {
-        mResolver = resolver;
         return this;
     }
 
@@ -355,6 +308,15 @@ public final class SmartHttp {
     }
 
     /**
+     * 参数以json格式上传
+     * @return
+     */
+    public SmartHttp paramAsJson() {
+        mParam.asJson();
+        return this;
+    }
+
+    /**
      * 添加上传的文件
      * @param key
      * @param file
@@ -366,9 +328,12 @@ public final class SmartHttp {
             throw new IllegalStateException("Upload need POST or PUT method");
         }
         if (file == null || !file.exists()) {
-            throw new IllegalArgumentException("Upload file is null or not exist");
+            if (isDebug) {  //Debug模式抛出exception
+                throw new IllegalArgumentException("Upload file is null or not exist");
+            }
+        } else {
+            mParam.multi(key, file, filename);
         }
-        mParam.multi(key, file, filename);
         return this;
     }
 
@@ -383,7 +348,7 @@ public final class SmartHttp {
     }
 
     /**
-     * 设置网络缓存的key。默认使用url 的md5
+     * 设置缓存key
      * @param key
      * @return
      */
@@ -393,31 +358,14 @@ public final class SmartHttp {
     }
 
     /**
-     * 设置缓存有效期
-     * @param mCacheTime
-     * @return
-     */
-    public SmartHttp cacheTime(long mCacheTime) {
-        return this;
-    }
-
-    /**
-     * 设置缓存类型
-     * @param model
-     * @return
-     */
-    public SmartHttp cacheModel(@CacheModel int model) {
-        mCacheModel = model;
-        return this;
-    }
-
-    /**
      * 异步请求
      * @param callback
-     * @return
+     * @return <T> 上次请求接口时缓存的数据
      */
-    public <T> Call enqueue(@NonNull TypeToken<T> typeToken, @Nullable RequestCallback<T> callback) {
-        return enqueue(typeToken.getType(), callback);
+    public <T> T enqueue(@NonNull TypeToken<T> reference, @Nullable RequestCallback<T> callback) {
+        mTargetTypeReference = reference;
+        realEnqueue(callback);
+        return mCache == null ? null : mCache.read(reference);
     }
 
     /**
@@ -425,94 +373,102 @@ public final class SmartHttp {
      * @param clz
      * @param callback
      * @param <T>
-     * @return
+     * @return <T> 上次请求接口时缓存的数据
      */
-    public <T> Call enqueue(@NonNull Class<T> clz, @Nullable RequestCallback<T> callback) {
-        return enqueue((Type) clz, callback);
+    public <T> T enqueue(@NonNull Class<T> clz, @Nullable RequestCallback<T> callback) {
+        mTargetClazz = clz;
+        realEnqueue(callback);
+        return mCache == null ? null : mCache.read(clz);
     }
 
     /**
      * 以String数据返回
      * @param callback
-     * @return
+     * @return <T> 上次请求接口时缓存的数据
      */
-    public Call enqueue(@Nullable RequestCallback<String> callback) {
-        return enqueue((Type) null, callback);
+    public String enqueue(@Nullable RequestCallback<String> callback) {
+        realEnqueue(callback);
+        return mCache == null ? null : mCache.read();
     }
 
-    private <T> Call enqueue(final Type type, RequestCallback<T> rawCallback) {
+    private <T> void realEnqueue(RequestCallback<T> rawCallback) {
         checkInit();
-        final RequestCallback callback = rawCallback == null ? DefaultCallback.<T>callback() : rawCallback;
+        if (mRequestMethod == METHOD_GET) {
+            if (TextUtils.isEmpty(mCacheKey)) mCacheKey = mUrl;
+            mCache = new Cache(mCacheDir, mCacheKey);
+        }
+
+        final RequestCallback callback = rawCallback == null ? new RequestCallback.DefaultRequestCallback<T>() : rawCallback;
         final OkHttpClient client = client();
         final Request request = request();
         final Call call = client.newCall(request);
-        checkCache(type, callback);
 
         call.enqueue(new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
-                if (call.isCanceled()) return;
-                callback.onFailure(new SmartHttpException(e));
+                if (call.isCanceled()) {
+                    Utils.debug("call is canceled");
+                    return;
+                }
+                postError(callback, new SmartHttpException(e));
             }
 
             @Override
             public void onResponse(Call call, Response response) throws IOException {
-                if (call.isCanceled()) return;
+                if (call.isCanceled()) {
+                    Utils.debug("call is canceled");
+                    return;
+                }
                 if (!response.isSuccessful()) {
-                    callback.onFailure(new SmartHttpException("http request error and error code is " + response.code()));
+                    postError(callback, new SmartHttpException("http request error and error code is " + response.code()));
                     return;
                 }
 
                 final String content = response.body().string();
-                Map<String, String> header = Utils.parseHeader(response.headers());
-                saveCache(content, header);
-
+//                final Map<String, String> header = Utils.parseHeader(response.headers());
+                Utils.debug("http content: " + content);
                 try {
-                    T val = null;
-                    if (type == null) {
-                        val = (T) content;
+                    final T val;
+                    if (mTargetClazz != null) {
+                        val = (T) mGson.fromJson(content, mTargetClazz);
+                    } else if (mTargetTypeReference != null) {
+                        val = (T) mGson.fromJson(content, mTargetTypeReference.getType());
                     } else {
-                        val = mResolver.fromJson(content, type);
+                        val = (T) content;
                     }
-                    callback.onSuccess(val, header, false);
-                } catch (JsonSyntaxException e) {
-                    Utils.e("parse fail json string: " + content, e);
-                    callback.onFailure(new SmartHttpException("Gson parse json fail", e));
+                    mMainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            callback.onSuccess(val);
+                        }
+                    });
+                    if (mCache != null) mCache.save(content);
                 } catch (Exception e) {
-                    Utils.e("", e);
-                    callback.onFailure(new SmartHttpException(e));
+                    Utils.e("parse json string fail: " + content, e);
+                    postError(callback, new SmartHttpException(e));
                 }
             }
         });
-
-        return call;
     }
 
-    private <T> void checkCache(Type type, RequestCallback<T> callback) {
-        if (mCacheModel != FIRST_CACHE_THEN_REQUEST) return;
-        Map<String, String> header = mCache.header(mCacheKey);
-        if (type == null) {
-            String content = mCache.get(mCacheKey);
-            if (!TextUtils.isEmpty(content)) {
-                callback.onSuccess((T) content, header, true);
+    private <T> void postError(final RequestCallback<T> callback, final SmartHttpException e) {
+        mMainHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                callback.onFailure(e);
             }
-        } else {
-            T data = mCache.get(mCacheKey, type);
-            if (data != null) {
-                callback.onSuccess(data, header, true);
-            }
-        }
+        });
     }
 
     /**
      * 同步请求
-     * @param typeToken
+     * @param reference
      * @param <T>
      * @return
-     * @throws SmartHttpException
      */
-    public <T> T execute(@NonNull TypeToken<T> typeToken) throws SmartHttpException {
-        return execute(typeToken.getType());
+    public <T> T execute(@NonNull TypeToken<T> reference) {
+        mTargetTypeReference = reference;
+        return realExecute();
     }
 
     /**
@@ -523,7 +479,8 @@ public final class SmartHttp {
      * @throws SmartHttpException
      */
     public <T> T execute(@NonNull Class<T> clz) {
-        return execute((Type) clz);
+        mTargetClazz = clz;
+        return realExecute();
     }
 
     /**
@@ -532,10 +489,10 @@ public final class SmartHttp {
      * @throws SmartHttpException
      */
     public String execute() {
-        return execute((Type) null);
+        return realExecute();
     }
 
-    private <T> T execute(Type type) {
+    private <T> T realExecute() {
         checkInit();
         String content = "";
         try {
@@ -548,78 +505,27 @@ public final class SmartHttp {
                 return null;
             }
             content = response.body().string();
-            saveCache(content, null);
-            if (type == null) {
+            if (mTargetClazz != null) {
+                return  (T) mGson.fromJson(content, mTargetClazz);
+            } else if (mTargetTypeReference != null) {
+                return (T) mGson.fromJson(content, mTargetTypeReference.getType());
+            } else {
                 return (T) content;
             }
-            return mResolver.fromJson(content, type);
-        } catch (IOException | JsonSyntaxException e) {
+        } catch (Exception e) {
             Utils.e("execute error", e);
             return null;
         }
     }
 
     /**
-     * 将请求转换成RxJava Observable。默认在io线程请求网络并且回调到主线程
-     * @param clazz
-     * @param <T>
-     * @return
-     */
-    public <T> Observable<T> observable(@NonNull Class<T> clazz) {
-        return observable((Type) clazz);
-    }
-
-    /**
-     * 将请求转换成RxJava Observable。默认在io线程请求网络并且回调到主线程
-     * @param typeToken
-     * @param <T>
-     * @return
-     */
-    public <T> Observable<T> observable(@NonNull TypeToken<T> typeToken) {
-        return observable(typeToken.getType());
-    }
-
-    /**
-     * 将请求转换成RxJava Observable。默认在io线程请求网络并且回调到主线程
-     * @return String
-     */
-    public Observable<String> observable() {
-        return observable((Type) null);
-    }
-
-    private <T> Observable<T> observable(final Type type) {
-        return Observable.just((Void) null).lift(new Observable.Operator<T, Void>() {
-            @Override
-            public Subscriber<? super Void> call(final Subscriber<? super T> subscriber) {
-                return new Subscriber<Void>() {
-                    @Override
-                    public void onCompleted() {
-                        subscriber.onCompleted();
-                    }
-
-                    @Override
-                    public void onError(Throwable e) {
-                        subscriber.onError(e);
-                    }
-
-                    @Override
-                    public void onNext(Void param) {
-                        T t = execute(type);
-                        subscriber.onNext(t);
-                    }
-                };
-            }
-        }).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread());
-    }
-
-    /**
      * 下载
-     * @param file
+     * @param filename
      * @param callback
      * @return
      */
-    public Call download(@NonNull String file, @Nullable DownloadCallback callback) {
-        return download(new File(file), callback);
+    public Call download(@NonNull String filename, @Nullable DownloadCallback callback) {
+        return download(new File(filename), callback);
     }
 
     /**
@@ -630,11 +536,11 @@ public final class SmartHttp {
      */
     public Call download(@NonNull final File file, @Nullable DownloadCallback rawCallback) {
         checkInit();
-        final DownloadCallback callback = rawCallback == null ? DefaultDownloadCallback.callback() : rawCallback;
+        final DownloadCallback callback = rawCallback == null ? new DownloadCallback.DefaultDownloadCallback() : rawCallback;
+        callback.onStart();
+
         final OkHttpClient client = client();
         Call call = client.newCall(request());
-
-        callback.onStart();
 
         call.enqueue(new Callback() {
             @Override
@@ -643,7 +549,7 @@ public final class SmartHttp {
             }
 
             @Override
-            public void onResponse(Call call, Response response) throws IOException {
+            public void onResponse(Call call, Response response) {
                 if (!response.isSuccessful()) {
                     callback.onFailure(new SmartHttpException("Http error, error code is " + response.code()));
                     return;
@@ -664,7 +570,8 @@ public final class SmartHttp {
                     }
                     fos.close();
                     callback.onEnd();
-                } catch (IOException e) {
+                } catch (Exception e) {
+                    Utils.e("download fail", e);
                     callback.onFailure(new SmartHttpException(e));
                 }
             }
@@ -675,27 +582,45 @@ public final class SmartHttp {
     ////////////////////////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    private void saveCache(String content, Map<String, String> header) {
-        if (mRequestMethod != METHOD_GET || TextUtils.isEmpty(mCacheKey)) return;
-        mCache.save(mCacheKey, content);
-        mCache.save(mCacheKey, header);
+    /**
+     * 返回请求参数
+     * @return
+     */
+    public Map<String, String> param() {
+        return mParam.parameters();
     }
+
+    /**
+     * 返回请求头
+     * @return
+     */
+    public Map<String, String> header() {
+        return mHeader.headers;
+    }
+
+    /**
+     * 返回请求url
+     * @return
+     */
+    public String url() {
+        return mUrl;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
 
     private Request request() {
         SmartHttpConfig config = SmartHttpConfig.getInstance();
         mHeader.merge(config.commonHeader);
         mParam.merge(config.commonParam);
+
+        if (mGson == null) mGson = config.mResolver;
+
         Request.Builder builder = new Request.Builder().tag(mTag).headers(mHeader.convert());
-        if (mCacheModel == DEFAULT_CACHE) {
-            builder.cacheControl(new CacheControl.Builder().maxAge(DEFAULT_CACHE_AGE, TimeUnit.SECONDS).build());
-        }
         switch (mRequestMethod) {
             case METHOD_GET:
-                final String url = spliceUrl();
-                builder.get().url(url);
-                if (TextUtils.isEmpty(mCacheKey)) {
-                    mCacheKey = Utils.md5(url);
-                }
+                builder.get().url(spliceUrl());
                 break;
             case METHOD_POST:
                 builder.url(mUrl).post(mParam.body());
@@ -726,7 +651,6 @@ public final class SmartHttp {
             sb.append('&');
         }
         sb.append(Utils.splitParam(mParam));
-
         return sb.toString();
     }
 
@@ -735,18 +659,26 @@ public final class SmartHttp {
             return sOkHttpClient;
         }
         OkHttpClient.Builder builder = sOkHttpClient.newBuilder();
-        client(builder, mCopyConfig);
+        prepareClient(builder, mCopyConfig);
 
         return builder.build();
     }
 
-    private static void client(OkHttpClient.Builder builder, SmartHttpConfig config) {
+    private static void prepareClient(OkHttpClient.Builder builder, SmartHttpConfig config) {
         builder.writeTimeout(config.writeTimeout, TimeUnit.SECONDS)
                 .readTimeout(config.readTimeout, TimeUnit.SECONDS)
                 .connectTimeout(config.connectTimeout, TimeUnit.SECONDS);
 
-        if (isDebug) {
+        if (config.isDebug) {
             builder.addNetworkInterceptor(new LoggingInterceptor());
+        }
+
+        switch (config.cookieType) {
+            case MEMORY_COOKIE:
+                builder.cookieJar(new CookieJarImp());
+                break;
+            case PERSISTENT_COOKIE:
+                builder.cookieJar(new CookieJarImp(config.cacheDir.getAbsolutePath()));
         }
 
         if (!config.interceptors.isEmpty()) {
@@ -791,30 +723,6 @@ public final class SmartHttp {
         return new SmartHttp(url, METHOD_PATCH);
     }
 
-    @IntDef (value = {NO_CACHE, DEFAULT_CACHE, FIRST_CACHE_THEN_REQUEST})
-    private @interface CacheModel {}
-
-    private static class DefaultCallback<T> implements RequestCallback<T> {
-        static RequestCallback callback() {
-            return new DefaultCallback();
-        }
-        @Override
-        public void onSuccess(T t, Map<String, String> headers, boolean isFromCache) {}
-        @Override
-        public void onFailure(SmartHttpException e) {}
-    }
-
-    private static class DefaultDownloadCallback implements DownloadCallback {
-        static DownloadCallback callback() {
-            return new DefaultDownloadCallback();
-        }
-        @Override
-        public void onStart() {}
-        @Override
-        public void onLoading(long current, long total) {}
-        @Override
-        public void onEnd() {}
-        @Override
-        public void onFailure(SmartHttpException e) {}
-    }
+    @IntDef (value = {NO_COOKIE, PERSISTENT_COOKIE, MEMORY_COOKIE})
+    @interface CookieType{}
 }

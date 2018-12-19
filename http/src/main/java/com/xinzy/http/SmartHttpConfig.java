@@ -1,10 +1,11 @@
 package com.xinzy.http;
 
 import android.content.Context;
-import android.support.annotation.IntDef;
+import android.support.annotation.NonNull;
 
 import com.google.gson.Gson;
 
+import java.io.File;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,10 +18,6 @@ import javax.net.ssl.X509TrustManager;
 
 import okhttp3.Interceptor;
 
-import static com.xinzy.http.SmartHttp.MEMORY_COOKIE;
-import static com.xinzy.http.SmartHttp.NO_COOKIE;
-import static com.xinzy.http.SmartHttp.PERSISTENT_COOKIE;
-
 /**
  * 配置类
  * Created by Xinzy on 2017/5/19.
@@ -29,11 +26,13 @@ import static com.xinzy.http.SmartHttp.PERSISTENT_COOKIE;
 public final class SmartHttpConfig {
 
     private static final int DEFAULT_TIMEOUT = 10;
-    public static final String UA = "User-Agent";
+    static final String UA = "User-Agent";
 
     int connectTimeout = DEFAULT_TIMEOUT;
     int readTimeout = DEFAULT_TIMEOUT;
     int writeTimeout = DEFAULT_TIMEOUT;
+
+    File cacheDir;
 
     boolean isDebug = false;
 
@@ -41,8 +40,6 @@ public final class SmartHttpConfig {
     HttpParam commonParam = new HttpParam();
 
     Gson mResolver = new Gson();
-
-    Context mContext;
 
     int cookieType;
 
@@ -54,6 +51,9 @@ public final class SmartHttpConfig {
     List<Interceptor> networkInterceptors = new ArrayList<>();
 
     private static SmartHttpConfig sHttpConfig;
+
+    private long maxCacheSize = 10 * 1024 * 1024;   // 10M
+    private long maxCacheExpire = 7 * 24 * 60 * 60 * 1000; // 7天
 
     private SmartHttpConfig() {
     }
@@ -70,7 +70,7 @@ public final class SmartHttpConfig {
         return sHttpConfig;
     }
 
-    SmartHttpConfig copy() {
+    SmartHttpConfig duplicate() {
         SmartHttpConfig config = new SmartHttpConfig();
         config.connectTimeout = connectTimeout;
         config.readTimeout = readTimeout;
@@ -162,28 +162,23 @@ public final class SmartHttpConfig {
         return this;
     }
 
-    public SmartHttpConfig addInterceptor(Interceptor interceptor) {
+    public SmartHttpConfig addInterceptor(@NonNull Interceptor interceptor) {
         interceptors.add(interceptor);
         return this;
     }
 
-    public SmartHttpConfig addNetworkInterceptor(Interceptor interceptor) {
+    public SmartHttpConfig addNetworkInterceptor(@NonNull Interceptor interceptor) {
         networkInterceptors.add(interceptor);
         return this;
     }
 
-    public SmartHttpConfig resolver(Gson resolver) {
+    public SmartHttpConfig resolver(@NonNull Gson resolver) {
         mResolver = resolver;
         return this;
     }
 
-    public SmartHttpConfig cookie(@CookieType int cookieType) {
+    public SmartHttpConfig cookie(@SmartHttp.CookieType int cookieType) {
         this.cookieType = cookieType;
-        return this;
-    }
-
-    public SmartHttpConfig with(Context context) {
-        mContext = context.getApplicationContext();
         return this;
     }
 
@@ -193,7 +188,6 @@ public final class SmartHttpConfig {
      * @return
      */
     public SmartHttpConfig certificates(InputStream... certificates) {
-
         return certificates(null, null, certificates);
     }
 
@@ -243,23 +237,31 @@ public final class SmartHttpConfig {
         return hostnameVerifier(new TrustHostnameVerifier());
     }
 
-    public SmartHttpConfig hostnameVerifier(HostnameVerifier hostnameVerifier) {
+    public SmartHttpConfig hostnameVerifier(@NonNull HostnameVerifier hostnameVerifier) {
         this.hostnameVerifier = hostnameVerifier;
         return this;
     }
 
-    public void initHttpClient() {
-        if (mContext == null) {
-            throw new IllegalStateException("must invoke function with(context) first");
-        }
-        if (!commonHeader.headers.containsKey(UA)) {
-            commonHeader.add(UA, Utils.getUserAgent(mContext));
-        }
-        SmartHttp.init(this);
+    /**
+     * 设置缓存大小
+     * @param size
+     * @return
+     */
+    public SmartHttpConfig maxCacheSize(long size) {
+        if (size > 1024 * 1024) maxCacheSize = size;
+        return this;
     }
 
-    @IntDef (value = {NO_COOKIE, MEMORY_COOKIE, PERSISTENT_COOKIE})
-    @interface CookieType {
+    public SmartHttpConfig maxCacheExpire(long time) {
+        maxCacheExpire = time;
+        return this;
+    }
+
+    public void initHttpClient(@NonNull Context context) {
+        cacheDir = new File(context.getCacheDir(), "http");
+        if (! cacheDir.exists()) cacheDir.mkdirs();
+        SmartHttp.init(this);
+        Cache.clearCache(cacheDir, maxCacheSize, maxCacheExpire);
     }
 
     class TrustHostnameVerifier implements HostnameVerifier {

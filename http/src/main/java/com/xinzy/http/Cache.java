@@ -1,85 +1,123 @@
 package com.xinzy.http;
 
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
+import android.util.Base64;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
 import java.io.File;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 
 /**
  * Created by Xinzy on 2017/6/8.
  *
  */
-interface Cache {
 
-    void save(String key, String data);
+class Cache {
 
-    void save(String key, Map<String, String> header);
+    private File mCacheFile;
+    private Gson mGson = new Gson();
 
-    String get(String key);
+    Cache(File dir, String key) {
+        if (dir != null && !TextUtils.isEmpty(key)) {
+            mCacheFile = new File(dir, Utils.md5(key));
+        }
+    }
 
-    <T> T get(String key, Type type);
+    boolean save(String content) {
+        if (!TextUtils.isEmpty(content)) {
+            return Utils.write(mCacheFile, content);
+        }
+        return false;
+    }
 
-    Map<String, String> header(String key);
+    @Nullable
+    String read() {
+        return Utils.read(mCacheFile);
+    }
+
+    @Nullable
+    <T> T read(Class<T> cls) {
+        String text = read();
+        if (TextUtils.isEmpty(text)) return null;
+        try {
+            return mGson.fromJson(text, cls);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Nullable
+    <T> T read(TypeToken<T> reference) {
+        String text = read();
+        if (TextUtils.isEmpty(text)) return null;
+        try {
+            return mGson.fromJson(text, reference.getType());
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
 
+    static void clearCache(File dir, long maxSize, long maxExpire) {
+        new ClearCacheTask(dir, maxSize, maxExpire).start();
+    }
 
-    class CacheImpl implements Cache {
-        private Gson mResolver;
-        private File mCacheDir;
+    static class ClearCacheTask extends Thread {
+        private static final float THRESHOLD = .75f;
+        private File dir;
+        private long maxSize;
+        private long maxExpire;
 
-        CacheImpl(String path) {
-            mResolver = new Gson();
-            mCacheDir = new File(path);
+        public ClearCacheTask(File dir, long maxSize, long maxExpire) {
+            super("ClearCacheTask");
+            this.dir = dir;
+            this.maxSize = maxSize;
+            this.maxExpire = maxExpire;
         }
 
         @Override
-        public void save(String key, String data) {
-            File cacheFile = new File(mCacheDir, key + ".1");
-            Utils.write(cacheFile, data);
-        }
+        public void run() {
+            if (dir == null || !dir.exists()) return;
+            final long currentTime = System.currentTimeMillis();
+            final long expire = currentTime - maxExpire;
+            final long threshold = (long) (maxSize * THRESHOLD);
+            long size = 0;
+            List<File> files = new ArrayList<>();
 
-        @Override
-        public void save(String key, Map<String, String> header) {
-            if (header != null) {
-                String h = mResolver.toJson(header);
-                File cacheFile = new File(mCacheDir, key + ".0");
-                Utils.write(cacheFile, h);
+            File[] children = dir.listFiles();
+            if (children == null) return;
+            for (File f : children) {
+                if (".".equals(f.getName()) || "..".equals(f.getName())) continue;
+                if (f.lastModified() > expire || !f.delete()) {
+                    size += f.length();
+                    files.add(f);
+                }
             }
-        }
 
-        @Override
-        public String get(String key) {
-            File cacheFile = new File(mCacheDir, key + ".1");
-            return Utils.read(cacheFile);
-        }
-
-        @Override
-        public <T> T get(String key, Type type) {
-            String content = get(key);
-            T data;
-            try {
-                data = mResolver.fromJson(content, type);
-            } catch (Exception e) {
-                data = null;
-            }
-            return data;
-        }
-
-        @Override
-        public Map<String, String> header(String key) {
-            File cacheFile = new File(mCacheDir, key + ".0");
-            String content = Utils.read(cacheFile);
-            if (TextUtils.isEmpty(content)) {
-                return null;
-            }
-            try {
-                return mResolver.fromJson(content, new TypeToken<Map<String, String>>(){}.getType());
-            } catch (Exception e) {
-                return null;
+            if (size <= threshold) return;
+            Collections.sort(files, new Comparator<File>() {
+                @Override
+                public int compare(File o1, File o2) {
+                    if (o1.lastModified() == o2.lastModified()) return 0;
+                    return o1.lastModified() < o2.lastModified() ? -1 : 1;
+                }
+            });
+            long deleteSize = size - threshold;
+            size = 0;
+            for (File file : files) {
+                long length = file.length();
+                if (file.delete()) {
+                    size += length;
+                }
+                if (size > deleteSize) break;
             }
         }
     }
