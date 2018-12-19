@@ -85,18 +85,18 @@ internal class HttpParam {
             params.isEmpty() -> RequestBody.create(MEDIA_TYPE_PLAIN, ByteArray(0))
             isMulti -> {
                 val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
-                for (param in params) {
-                    if (param.isMulti) {
-                        builder.addFormDataPart(param.key, param.value, RequestBody.create(param.mediaType, param.file!!))
+                params.forEach {
+                    if (it.isMulti) {
+                        builder.addFormDataPart(it.key, it.value, RequestBody.create(it.mediaType, it.file!!))
                     } else {
-                        builder.addFormDataPart(param.key, encode(param.value))
+                        builder.addFormDataPart(it.key, encode(it.value))
                     }
                 }
                 builder.build()
             }
             else -> {
                 val builder = FormBody.Builder()
-                params.filterNot { it.isMulti }.forEach { builder.add(it.key, it.value) }
+                params.filterNot { it.isMulti }.forEach { builder.add(it.key, encode(it.value)) }
                 builder.build()
             }
         }
@@ -112,6 +112,17 @@ internal class HttpParam {
             } }
             map
         }
+    }
+
+    fun splitParam(): String {
+        val sb = StringBuffer()
+        if (params.size > 0) {
+            for (entry in params) {
+                sb.append(entry.key).append("=").append(encode(entry.value)).append('&')
+            }
+            return sb.substring(0, sb.length - 1)
+        }
+        return ""
     }
 
     private fun toJSON(): String {

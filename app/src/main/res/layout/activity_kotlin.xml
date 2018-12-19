@@ -22,6 +22,18 @@
             android:layout_height="wrap_content"
             android:onClick="onGet2"
             android:text="GET2"/>
+
+        <Button
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:onClick="onUpload"
+            android:text="Upload"/>
+
+        <Button
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:onClick="onDownload"
+            android:text="Download"/>
     </LinearLayout>
 
 </ScrollView>

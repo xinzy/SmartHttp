@@ -8,7 +8,7 @@ import okhttp3.Headers
  */
 internal class HttpHeader {
 
-    private val headers = mutableMapOf<String, String>()
+    val headers = mutableMapOf<String, String>()
 
     fun add(key: String, value: String): HttpHeader {
         if (TextUtils.isEmpty(key)) throw IllegalArgumentException("key cannot be null")

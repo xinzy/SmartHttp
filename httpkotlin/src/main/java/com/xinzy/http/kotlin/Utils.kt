@@ -78,18 +78,6 @@ internal fun md5(input: String): String {
     }
 }
 
-internal fun splitParam(param: HttpParam): String {
-    val sb = StringBuffer()
-    if (param.params.size > 0) {
-        for (entry in param.params) {
-            sb.append(entry.key).append("=").append(encode(entry.value)).append('&')
-        }
-        return sb.substring(0, sb.length - 1)
-    }
-    return ""
-}
-
-
 internal fun log(msg: String, e: Exception? = null) {
     if (!SmartHttp.isDebug) return
     if (e == null) Log.d(SmartHttp.TAG, msg)

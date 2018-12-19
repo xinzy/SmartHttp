@@ -4,11 +4,13 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.support.annotation.IntDef
+import android.support.annotation.Nullable
 import android.text.TextUtils
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import okhttp3.*
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -137,7 +139,7 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
      * @return
      */
     fun cacheKey(key: String): SmartHttp {
-        mCacheKey = key
+        mCacheKey = md5(key)
         return this
     }
 
@@ -283,6 +285,61 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
         }
     }
 
+    fun download(filename: String, @Nullable callback: DownloadCallback?) {
+        download(File(filename), callback)
+    }
+
+    fun download(file: File, @Nullable callback: DownloadCallback?) {
+        val innerCallback = callback ?: DefaultDownloadCallback()
+        innerCallback.onStart()
+
+        val client = getClient()
+        val request = request()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                log("response failure", e)
+                innerCallback.onFailure(SmartHttpException(e))
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                if (!response.isSuccessful) {
+                    log("response code is ${response.code()}", null)
+                    innerCallback.onFailure(SmartHttpException("response code is ${response.code()}"))
+                    return
+                }
+                try {
+                    val body = response.body()
+
+                    val contentLength = body!!.contentLength()
+                    val inputStream = body.byteStream()
+                    var current = 0L
+
+                    val outputStream = FileOutputStream(file)
+                    val buffer = ByteArray(BUFFER_SIZE)
+
+                    var length = inputStream.read(buffer)
+                    while (length > 0) {
+                        current += length
+                        outputStream.write(buffer, 0, length)
+
+                        innerCallback.onLoading(current, contentLength)
+                        length = inputStream.read(buffer)
+                    }
+
+                    inputStream.read()
+
+                    inputStream.close()
+                    outputStream.close()
+                    innerCallback.onEnd()
+                } catch (e: Exception) {
+                    log("save file failure", e)
+                    innerCallback.onFailure(SmartHttpException(e))
+                }
+            }
+        })
+    }
+
     private fun request(): Request {
         val config = SmartHttpConfig.getInstance()
         mHeader.merge(config.commonHeader)
@@ -308,7 +365,7 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
         } else if (!mUrl.endsWith("&")) {
             sb.append('&')
         }
-        sb.append(splitParam(mParam))
+        sb.append(mParam.splitParam())
 
         return sb.toString()
     }
@@ -317,6 +374,24 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
         if (TextUtils.isEmpty(mCacheKey)) return
         mCache?.save(mCacheKey!!, content)
     }
+
+    /**
+     * 返回请求url
+     * @return
+     */
+    fun url() = mUrl
+
+    /**
+     * 返回请求头
+     * @return
+     */
+    fun header() = mHeader.headers
+
+    /**
+     * 返回请求参数
+     * @return
+     */
+    fun parameter() = mParam.parameter()
 
     companion object {
         internal const val TAG = "SmartHttp"
