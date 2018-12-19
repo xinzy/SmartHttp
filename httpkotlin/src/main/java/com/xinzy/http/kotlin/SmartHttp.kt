@@ -209,16 +209,12 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
             postError(callback, SmartHttpException(e))
         }
 
-        return try {
-            if (TextUtils.isEmpty(mCacheKey)) return null
-            val cacheString = mCache?.get(mCacheKey!!) ?: return null
-            when {
-                mTargetClazz != null -> mResolver!!.fromJson<T>(cacheString, mTargetClazz)
-                mTargetTypeToken != null -> mResolver!!.fromJson<T>(cacheString, mTargetTypeToken!!.type)
-                else -> cacheString as T
-            }
-        } catch (e: Exception) {
-            null
+        if (TextUtils.isEmpty(mCacheKey)) return null
+        val cacheString = sCache?.get(mCacheKey!!) ?: return null
+        return when {
+            mTargetClazz != null -> mResolver!!.fromJson<T>(cacheString, mTargetClazz)
+            mTargetTypeToken != null -> mResolver!!.fromJson<T>(cacheString, mTargetTypeToken!!.type)
+            else -> cacheString as T
         }
     }
 
@@ -372,7 +368,7 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
 
     private fun saveCache(content: String) {
         if (TextUtils.isEmpty(mCacheKey)) return
-        mCache?.save(mCacheKey!!, content)
+        sCache?.save(mCacheKey!!, content)
     }
 
     /**
@@ -414,7 +410,7 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
         const val PERSISTENT_COOKIE = 0x2
 
         private var sOkHttpClient: OkHttpClient? = null
-        private var mCache: Cache? = null
+        private var sCache: Cache? = null
 
         internal var isDebug = BuildConfig.DEBUG
 
@@ -473,7 +469,7 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
         internal fun init(context: Context, config: SmartHttpConfig) {
             isDebug = config.isDebug
             val cacheDir = getCacheDir(context, CACHE_DIR_NAME)
-            mCache = CacheImpl(cacheDir)
+            sCache = Cache(cacheDir)
 
             val builder: OkHttpClient.Builder = if (sOkHttpClient != null) {
                 sOkHttpClient!!.newBuilder()
