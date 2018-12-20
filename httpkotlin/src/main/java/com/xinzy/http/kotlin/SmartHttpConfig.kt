@@ -3,6 +3,7 @@ package com.xinzy.http.kotlin
 import android.content.Context
 import com.google.gson.Gson
 import com.xinzy.http.kotlin.BuildConfig
+import com.xinzy.http.kotlin.SmartHttp.Companion.isDebug
 import okhttp3.Interceptor
 import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.SSLSocketFactory
@@ -105,10 +106,7 @@ class SmartHttpConfig private constructor() {
      * @return
      */
     fun addCommonParam(params: Map<String, String>): SmartHttpConfig {
-        if (params.isNotEmpty()) {
-            val keys = params.keys
-            keys.forEach { commonParam.add(it, params[it]) }
-        }
+        params.takeIf { it.isNotEmpty() }?.keys?.forEach { commonParam.add(it, params[it]) }
         return this
     }
 

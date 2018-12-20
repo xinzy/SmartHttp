@@ -392,7 +392,7 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
     companion object {
         internal const val TAG = "SmartHttp"
 
-        private const val MAX_CACHE_SIZE = 50 * 1024 * 1024
+        private const val MAX_CACHE_SIZE = 50 * 1024 * 1024L
         private const val CACHE_DIR_NAME = "http"
 
         private const val METHOD_GET = 0x0
@@ -447,13 +447,7 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
         }
 
         private fun cancel(calls: List<Call>?, tag: Any) {
-            if (calls != null && calls.isNotEmpty()) {
-                for (call in calls) {
-                    if (!call.isCanceled && tag == call.request().tag()) {
-                        call.cancel()
-                    }
-                }
-            }
+            calls?.takeIf { it.isNotEmpty() }?.filter { !it.isCanceled && tag == it.request().tag() }?.forEach { it.cancel() }
         }
 
         private fun getClient(): OkHttpClient {
@@ -474,7 +468,7 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
             val builder: OkHttpClient.Builder = if (sOkHttpClient != null) {
                 sOkHttpClient!!.newBuilder()
             } else {
-                OkHttpClient.Builder().cache(okhttp3.Cache(cacheDir, MAX_CACHE_SIZE.toLong()))
+                OkHttpClient.Builder().cache(okhttp3.Cache(cacheDir, MAX_CACHE_SIZE))
             }
 
             when (config.cookieType) {
@@ -490,16 +484,8 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
                     .readTimeout(config.readTimeout.toLong(), TimeUnit.SECONDS)
                     .connectTimeout(config.connectTimeout.toLong(), TimeUnit.SECONDS)
 
-            if (config.interceptors.isNotEmpty()) {
-                for (interceptor in config.interceptors) {
-                    builder.addInterceptor(interceptor)
-                }
-            }
-            if (config.networkInterceptors.isNotEmpty()) {
-                for (interceptor in config.networkInterceptors) {
-                    builder.addNetworkInterceptor(interceptor)
-                }
-            }
+            config.interceptors.takeIf { it.isNotEmpty() }?.forEach { builder.addInterceptor(it) }
+            config.networkInterceptors.takeIf { it.isNotEmpty() }?.forEach { builder.addNetworkInterceptor(it) }
             if (config.sslSocketFactory != null && config.trustManager != null) {
                 builder.sslSocketFactory(config.sslSocketFactory!!, config.trustManager!!)
             }

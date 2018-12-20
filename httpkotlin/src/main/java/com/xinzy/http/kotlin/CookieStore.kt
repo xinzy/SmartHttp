@@ -31,11 +31,7 @@ internal class MemoryCookieStore internal constructor() : CookieStore {
         val cookies = mCookies[host]
         if (cookies != null && cookies.isNotEmpty()) {
             val cs = mutableListOf<Cookie>()
-            for (cookie in cookies) {
-                if (!isCookieExpired(cookie)) {
-                    cs.add(cookie)
-                }
-            }
+            cookies.filterNot { isCookieExpired(it) }.forEach { cs.add(it) }
             return cs
         }
 
@@ -55,9 +51,7 @@ internal class PersistentCookieStore internal constructor(private val mCookieDir
     override fun save(url: HttpUrl, cookies: List<Cookie>) {
         if (cookies.isNotEmpty()) {
             val cs = mutableListOf<C>()
-            for (cookie in cookies) {
-                cs.add(C.convert(cookie))
-            }
+            cookies.forEach { cs.add(C.convert(it)) }
             File(mCookieDir, md5(url.host())).writeText(mGson.toJson(cs))
         }
     }
@@ -67,16 +61,10 @@ internal class PersistentCookieStore internal constructor(private val mCookieDir
         val cookies = mutableListOf<Cookie>()
         if (!TextUtils.isEmpty(content)) {
             try {
-                val list = mGson.fromJson<List<C>>(content, object : TypeToken<List<C>>() {
-                }.type)
-                if (list != null && list.isNotEmpty()) {
-                    for (c in list) {
-                        val cookie = c.convert()
-                        if (!isCookieExpired(cookie)) {
-                            cookies.add(cookie)
-                        }
-                    }
-                }
+                val list = mGson.fromJson<List<C>>(content, object : TypeToken<List<C>>() {}.type)
+                list?.let { cs -> run {
+                    cs.filter { it.isExpired() }.forEach { cookies.add(it.convert()) }
+                } }
             } catch (e: Exception) {
             }
         }
@@ -99,6 +87,8 @@ internal class C internal constructor(private var name: String, private var valu
         }
         return builder.build()
     }
+
+    fun isExpired() = isCookieExpired(convert())
 
     companion object {
         internal fun convert(cookie: Cookie): C {

@@ -20,13 +20,10 @@ internal class HttpHeader {
         return if (header == null) this else merge(header.headers)
     }
 
-    fun merge(headers: Map<String, String>?): HttpHeader {
-        headers?.let {
-            for (key in it.keys) {
-                val v = it[key]
-                v?.let {  this.headers.put(key, v) }
-            }
-        }
+    fun merge(header: Map<String, String>?): HttpHeader {
+        header?.let { h -> run {
+            h.keys.filter { h[it] != null }.forEach { this.headers[it] = h[it]!! }
+        } }
 
         return this
     }
