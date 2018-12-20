@@ -287,7 +287,7 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
 
     fun download(file: File, @Nullable callback: DownloadCallback?) {
         val innerCallback = callback ?: DefaultDownloadCallback()
-        innerCallback.onStart()
+        mHandler.post { innerCallback.onStart() }
 
         val client = getClient()
         val request = request()
@@ -295,42 +295,42 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 log("response failure", e)
-                innerCallback.onFailure(SmartHttpException(e))
+                mHandler.post { innerCallback.onFailure(SmartHttpException(e)) }
             }
 
             override fun onResponse(call: Call, response: Response) {
                 if (!response.isSuccessful) {
                     log("response code is ${response.code()}", null)
-                    innerCallback.onFailure(SmartHttpException("response code is ${response.code()}"))
+                    mHandler.post { innerCallback.onFailure(SmartHttpException("response code is ${response.code()}")) }
                     return
                 }
                 try {
                     val body = response.body()
 
                     val contentLength = body!!.contentLength()
-                    val inputStream = body.byteStream()
                     var current = 0L
 
-                    val outputStream = FileOutputStream(file)
-                    val buffer = ByteArray(BUFFER_SIZE)
+                    body.byteStream().use {
+                        val outputStream = FileOutputStream(file)
+                        val buffer = ByteArray(BUFFER_SIZE)
 
-                    var length = inputStream.read(buffer)
-                    while (length > 0) {
-                        current += length
-                        outputStream.write(buffer, 0, length)
+                        while (true) {
+                            val length = it.read(buffer)
+                            if (length <= 0) break
+                            outputStream.write(buffer, 0, length)
+                            current += length
 
-                        innerCallback.onLoading(current, contentLength)
-                        length = inputStream.read(buffer)
+                            mHandler.post { innerCallback.onLoading(current, contentLength) }
+                        }
+
+                        outputStream.flush()
+                        outputStream.close()
                     }
 
-                    inputStream.read()
-
-                    inputStream.close()
-                    outputStream.close()
-                    innerCallback.onEnd()
+                    mHandler.post { innerCallback.onEnd() }
                 } catch (e: Exception) {
                     log("save file failure", e)
-                    innerCallback.onFailure(SmartHttpException(e))
+                    mHandler.post { innerCallback.onFailure(SmartHttpException(e)) }
                 }
             }
         })
@@ -479,7 +479,7 @@ class SmartHttp private constructor(private val mUrl: String/** url  */, private
 
             when (config.cookieType) {
                 MEMORY_COOKIE -> builder.cookieJar(CookieJarImp())
-                PERSISTENT_COOKIE -> builder.cookieJar(CookieJarImp(cacheDir.absolutePath))
+                PERSISTENT_COOKIE -> builder.cookieJar(CookieJarImp(cacheDir))
             }
             prepareClient(builder, config)
             sOkHttpClient = builder.build()

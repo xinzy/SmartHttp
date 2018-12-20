@@ -1,14 +1,11 @@
 package com.xinzy.http.kotlin
 
-import android.support.v4.util.ArrayMap
 import android.text.TextUtils
 
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
 import java.io.File
-import java.util.ArrayList
-import java.util.Collections
 
 import okhttp3.Cookie
 import okhttp3.HttpUrl
@@ -23,7 +20,7 @@ internal interface CookieStore {
 }
 
 internal class MemoryCookieStore internal constructor() : CookieStore {
-    private val mCookies: MutableMap<String, List<Cookie>> = Collections.synchronizedMap(ArrayMap())
+    private val mCookies = mutableMapOf<String, List<Cookie>>()
 
     override fun save(url: HttpUrl, cookies: List<Cookie>) {
         mCookies[url.host()] = cookies
@@ -33,7 +30,7 @@ internal class MemoryCookieStore internal constructor() : CookieStore {
         val host = url.host()
         val cookies = mCookies[host]
         if (cookies != null && cookies.isNotEmpty()) {
-            val cs = ArrayList<Cookie>()
+            val cs = mutableListOf<Cookie>()
             for (cookie in cookies) {
                 if (!isCookieExpired(cookie)) {
                     cs.add(cookie)
@@ -42,7 +39,7 @@ internal class MemoryCookieStore internal constructor() : CookieStore {
             return cs
         }
 
-        return ArrayList(0)
+        return listOf()
     }
 }
 
@@ -57,21 +54,17 @@ internal class PersistentCookieStore internal constructor(private val mCookieDir
 
     override fun save(url: HttpUrl, cookies: List<Cookie>) {
         if (cookies.isNotEmpty()) {
-            val file = File(mCookieDir, md5(url.host()))
-
-            val cs = ArrayList<C>()
+            val cs = mutableListOf<C>()
             for (cookie in cookies) {
                 cs.add(C.convert(cookie))
             }
-            val content = mGson.toJson(cs)
-            write(file, content)
+            File(mCookieDir, md5(url.host())).writeText(mGson.toJson(cs))
         }
     }
 
     override fun load(url: HttpUrl): List<Cookie> {
-        val f = File(mCookieDir, md5(url.host()))
-        val content = read(f)
-        val cookies = ArrayList<Cookie>()
+        val content = File(mCookieDir, md5(url.host())).readText()
+        val cookies = mutableListOf<Cookie>()
         if (!TextUtils.isEmpty(content)) {
             try {
                 val list = mGson.fromJson<List<C>>(content, object : TypeToken<List<C>>() {
@@ -91,22 +84,23 @@ internal class PersistentCookieStore internal constructor(private val mCookieDir
     }
 }
 
-internal class C internal constructor(var name: String, var value: String, var expiresAt: Long, var domain: String, var path: String,
-                             var secure: Boolean, var httpOnly: Boolean, var persistent: Boolean, var hostOnly: Boolean) {
+internal class C internal constructor(private var name: String, private var value: String, private var expiresAt: Long,
+                                      private var domain: String, private var path: String, private var secure: Boolean,
+                                      private var httpOnly: Boolean, private var persistent: Boolean,
+                                      private var hostOnly: Boolean) {
 
     internal fun convert(): Cookie {
         val builder = Cookie.Builder().name(name).value(value).expiresAt(expiresAt).domain(domain).path(path)
         if (secure) {
             builder.secure()
         }
-        if (hostOnly) {
+        if (httpOnly) {
             builder.httpOnly()
         }
         return builder.build()
     }
 
     companion object {
-
         internal fun convert(cookie: Cookie): C {
             return C(cookie.name(), cookie.value(), cookie.expiresAt(), cookie.domain(), cookie.path(),
                     cookie.secure(), cookie.httpOnly(), cookie.persistent(), cookie.hostOnly())

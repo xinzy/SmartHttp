@@ -17,7 +17,7 @@ internal class CookieJarImp : CookieJar {
         mCookieStore = MemoryCookieStore()
     }
 
-    constructor(dir: String) {
+    constructor(dir: File) {
         val cookieDir = File(dir, "cookie")
         mCookieStore = PersistentCookieStore(cookieDir)
     }

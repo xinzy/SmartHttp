@@ -15,15 +15,15 @@ internal class Cache(private val mCacheDir: File) {
     private val mResolver = Gson()
 
     fun save(key: String, data: String?) {
-        data?.let { write(File(mCacheDir, "$key.1"), it) }
+        data?.let { File(mCacheDir, "$key.1").writeText(it) }
     }
 
     fun save(key: String, header: Map<String, String>?) {
-        header?.let { write(File(mCacheDir, "$key.0"), mResolver.toJson(it)) }
+        header?.let { File(mCacheDir, "$key.0").writeText(mResolver.toJson(it)) }
     }
 
     fun get(key: String): String? {
-        return read(File(mCacheDir, "$key.1"))
+        return File(mCacheDir, "$key.1").readText()
     }
 
     fun <T> get(key: String, token: TypeToken<*>): T? {
@@ -45,8 +45,7 @@ internal class Cache(private val mCacheDir: File) {
     }
 
     fun header(key: String): Map<String, String>? {
-        val cacheFile = File(mCacheDir, "$key.0")
-        val content = read(cacheFile)
+        val content = File(mCacheDir, "$key.0").readText()
         if (TextUtils.isEmpty(content)) {
             return null
         }

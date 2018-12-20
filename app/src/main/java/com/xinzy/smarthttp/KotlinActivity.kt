@@ -2,17 +2,19 @@ package com.xinzy.smarthttp
 
 import android.content.Context
 import android.content.Intent
-import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Environment
+import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.view.View
 import com.google.gson.reflect.TypeToken
 import com.xinzy.http.kotlin.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import java.io.File
 
 class KotlinActivity : AppCompatActivity() {
-
 
     companion object {
         private const val TAG = "KotlinActivity"
@@ -61,7 +63,7 @@ class KotlinActivity : AppCompatActivity() {
         "http://10.107.77.132/api/weidu.php?action=upload".httpPost()
                 .param("aaa", "0000")
                 .param("file1", file1).param("file2", file2)
-                .enquene(
+                .enqueue(
                         { data: String? -> run { Log.d(TAG, "onSuccess: $data")} },
                         { Log.d(TAG, "failure") }
                 )
@@ -85,8 +87,17 @@ class KotlinActivity : AppCompatActivity() {
             override fun onFailure(e: SmartHttpException) {
                 Log.e(TAG, "download failure", e)
             }
-
         })
     }
 
+    fun onCoroutine(v: View) {
+        Log.d(TAG, "start thread=${Thread.currentThread().name}")
+        GlobalScope.launch(Dispatchers.IO) {
+            Log.d(TAG, "thread=${Thread.currentThread().name}")
+            val content = URL.httpGet().param("aa", "11").header("hh", "22").cacheKey("123123123123").execute()
+            launch(Dispatchers.Main) {
+                Log.d(TAG, "${Thread.currentThread().name} content=$content")
+            }
+        }
+    }
 }

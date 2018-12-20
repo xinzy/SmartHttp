@@ -37,8 +37,7 @@ internal class HttpParam {
 
     fun add(vals: Map<String, String>?): HttpParam {
         if (vals != null && vals.isNotEmpty()) {
-            val keys = vals.keys
-            keys.forEach { add(it, vals[it])}
+            vals.keys.forEach { add(it, vals[it])}
         }
         return this
     }
@@ -63,7 +62,7 @@ internal class HttpParam {
     }
 
     fun merge(param: HttpParam?): HttpParam {
-        if (param?.params != null && param.params.size > 0) {
+        if (param?.params != null && param.params.isNotEmpty()) {
             params.addAll(param.params)
         }
         return this
@@ -72,17 +71,17 @@ internal class HttpParam {
     fun body(): RequestBody {
         if (isJSON) {
             return when {
-                mJSON != null -> RequestBody.create(MEDIA_TYPE_JSON, mJSON!!.toByteArray())
+                mJSON != null -> RequestBody.create(MEDIA_TYPE_JSON, mJSON!!)
                 params.isEmpty() -> RequestBody.create(MEDIA_TYPE_JSON, "{}")
                 else -> RequestBody.create(MEDIA_TYPE_JSON, toJSON())
             }
         }
         if (params.isEmpty()) {
-            return RequestBody.create(MEDIA_TYPE_PLAIN, ByteArray(0))
+            return RequestBody.create(MEDIA_TYPE_PLAIN, "")
         }
 
         return when {
-            params.isEmpty() -> RequestBody.create(MEDIA_TYPE_PLAIN, ByteArray(0))
+            params.isEmpty() -> RequestBody.create(MEDIA_TYPE_PLAIN, "")
             isMulti -> {
                 val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
                 params.forEach {
@@ -116,13 +115,12 @@ internal class HttpParam {
 
     fun splitParam(): String {
         val sb = StringBuffer()
-        if (params.size > 0) {
+        return if (params.size > 0) {
             for (entry in params) {
                 sb.append(entry.key).append("=").append(encode(entry.value)).append('&')
             }
-            return sb.substring(0, sb.length - 1)
-        }
-        return ""
+            sb.substring(0, sb.length - 1)
+        } else ""
     }
 
     private fun toJSON(): String {

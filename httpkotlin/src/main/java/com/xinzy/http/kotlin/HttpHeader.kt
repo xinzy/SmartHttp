@@ -12,7 +12,7 @@ internal class HttpHeader {
 
     fun add(key: String, value: String): HttpHeader {
         if (TextUtils.isEmpty(key)) throw IllegalArgumentException("key cannot be null")
-        headers.put(key, value)
+        headers[key] = value
         return this
     }
 

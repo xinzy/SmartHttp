@@ -43,33 +43,6 @@ internal fun isCookieExpired(cookie: Cookie): Boolean {
     return cookie.expiresAt() < System.currentTimeMillis()
 }
 
-internal fun write(file: File, content: String): Boolean {
-    return try {
-        val writer = BufferedWriter(FileWriter(file))
-        writer.write(content)
-        writer.close()
-        true
-    } catch (e: IOException) {
-        false
-    }
-}
-
-internal fun read(file: File): String? {
-   return try {
-        val reader = BufferedReader(FileReader(file))
-        val sb = StringBuilder()
-        var line: String? = reader.readLine()
-        while (line != null) {
-            sb.append(line)
-            line = reader.readLine()
-        }
-        reader.close()
-        sb.toString()
-    } catch (e: IOException) {
-        null
-    }
-}
-
 internal fun md5(input: String): String {
     val md = MessageDigest.getInstance("MD5")
     val digested = md.digest(input.toByteArray())
