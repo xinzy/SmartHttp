@@ -106,9 +106,7 @@ internal class HttpParam {
             mapOf()
         } else {
             val map = mutableMapOf<String, String>()
-            params.filterNot { !it.isMulti }.forEach { item -> run {
-                map.put(item.key, item.value)
-            } }
+            params.filterNot { !it.isMulti }.forEach { map[it.key] = it.value }
             map
         }
     }
