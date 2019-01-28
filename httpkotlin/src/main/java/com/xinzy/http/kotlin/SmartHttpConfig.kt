@@ -190,15 +190,8 @@ class SmartHttpConfig private constructor() {
         var DEFAULT_TIMEOUT = 10
         private var sInstance: SmartHttpConfig? = null
 
-        fun getInstance(): SmartHttpConfig {
-            if (sInstance == null) {
-                synchronized(SmartHttpConfig::class) {
-                    if (sInstance == null) {
-                        sInstance = SmartHttpConfig()
-                    }
-                }
+        fun getInstance(): SmartHttpConfig = sInstance ?: synchronized(this) {
+                sInstance ?: SmartHttpConfig().also { sInstance = it }
             }
-            return sInstance!!
-        }
     }
 }
